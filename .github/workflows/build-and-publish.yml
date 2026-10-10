@@ -66,9 +66,9 @@ jobs:
        user: ${{ secrets.SSH_USER }} # "user"
        password: ${{ secrets.SSH_PASSWORD }} # "password"
        local: webapi-host.tar.gz
-       remote: "/home/laraue/markdown-utils-web-api-host"
+       remote: "/home/laraue/markdown-web-api-host"
        post_upload: |-
-        cd /home/laraue/markdown-utils-web-api-host && find . -mindepth 1 ! -name webapi-host.tar.gz -delete &&
+        cd /home/laraue/markdown-web-api-host && find . -mindepth 1 ! -name webapi-host.tar.gz -delete &&
         tar -xzf webapi-host.tar.gz && rm webapi-host.tar.gz
 
     - name: Build container
@@ -80,8 +80,8 @@ jobs:
        password: ${{ secrets.SSH_PASSWORD }}
        script: |
         set -e
-        cd /home/laraue && docker compose build backendmarkdowntranspiler
-        docker compose up -d --force-recreate backendmarkdowntranspiler
+        cd /home/laraue && docker compose build markdown-web-api-host
+        docker compose up -d --force-recreate markdown-web-api-host
 
     - name: Notify deploy finished
       if: success()
