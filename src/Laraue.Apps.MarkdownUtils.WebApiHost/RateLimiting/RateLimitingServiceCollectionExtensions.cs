@@ -1,0 +1,90 @@
+using System.Globalization;
+using System.Threading.RateLimiting;
+using Laraue.Apps.MarkdownUtils.Services;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
+
+namespace Laraue.Apps.MarkdownTranspiler.WebApi.RateLimiting;
+
+public static class RateLimitingServiceCollectionExtensions
+{
+    private const string NoLimitPartition = "none";
+    private const string TranslateConcurrencyPartition = "translate";
+
+    /// <summary>
+    /// Limits the endpoint marked with <see cref="TranslateRateLimitAttribute"/> per client address
+    /// (the real one, so the forwarded headers must be applied before the limiter runs).
+    /// Over the limit the client gets 429 with Retry-After.
+    /// </summary>
+    public static IServiceCollection AddTranslateRateLimiting(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddValidatedOptions<RateLimitingOptions>(configuration.GetSection("RateLimiting"));
+
+        services.AddRateLimiter(_ => { });
+        services
+            .AddOptions<RateLimiterOptions>()
+            .Configure<IOptions<RateLimitingOptions>, MarkdownTranslatorMetrics>((limiter, options, metrics) =>
+            {
+                var limits = options.Value;
+
+                limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                // The concurrency limit goes first: its permit is given back when the client windows reject
+                // the request, while the windows only take permits when the request passes all of them.
+                limiter.GlobalLimiter = PartitionedRateLimiter.CreateChained(
+                    TranslateConcurrencyLimiter(limits.Translate),
+                    TranslateWindowsLimiter(limits.Translate));
+
+                limiter.OnRejected = (context, _) =>
+                {
+                    // Only the client windows know when a permit frees up; the concurrency limit doesn't.
+                    var byClientLimit = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter);
+                    if (!byClientLimit)
+                        retryAfter = limits.DefaultRetryAfter;
+
+                    context.HttpContext.Response.Headers.RetryAfter =
+                        Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+
+                    metrics.TranslationRateLimited(byClientLimit ? RateLimit.Client : RateLimit.Concurrency);
+
+                    return ValueTask.CompletedTask;
+                };
+            });
+
+        return services;
+    }
+
+    private static PartitionedRateLimiter<HttpContext> TranslateWindowsLimiter(TranslateLimits limits)
+    {
+        return PartitionedRateLimiter.Create<HttpContext, string>(context =>
+        {
+            if (!context.IsTranslateRateLimited())
+                return RateLimitPartition.GetNoLimiter(NoLimitPartition);
+
+            return RateLimitPartition.Get(
+                context.GetClientAddress(),
+                _ => new MultiWindowRateLimiter(limits.Windows));
+        });
+    }
+
+    private static PartitionedRateLimiter<HttpContext> TranslateConcurrencyLimiter(TranslateLimits limits)
+    {
+        return PartitionedRateLimiter.Create<HttpContext, string>(context =>
+        {
+            if (!context.IsTranslateRateLimited())
+                return RateLimitPartition.GetNoLimiter(NoLimitPartition);
+
+            return RateLimitPartition.GetConcurrencyLimiter(
+                TranslateConcurrencyPartition,
+                _ => new ConcurrencyLimiterOptions
+                {
+                    PermitLimit = limits.ConcurrencyLimit,
+                    QueueLimit = 0,
+                });
+        });
+    }
+
+    public static string GetClientAddress(this HttpContext context)
+    {
+        return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    }
+}

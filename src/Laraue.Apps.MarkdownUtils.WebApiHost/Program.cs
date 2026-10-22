@@ -1,3 +1,5 @@
+using Laraue.Apps.MarkdownTranspiler.WebApi;
+using Laraue.Apps.MarkdownTranspiler.WebApi.RateLimiting;
 using Laraue.Apps.MarkdownUtils.Services;
 using Laraue.Core.Exceptions;
 using Microsoft.Extensions.Options;
@@ -18,6 +20,9 @@ builder.Services.AddOptions<MarkdownTranslatorOptions>();
 
 builder.Services.Configure<OpenAiClientOptions>(builder.Configuration.GetSection("OpenAiClientOptions"));
 builder.Services.Configure<MarkdownTranslatorOptions>(builder.Configuration.GetSection("MarkdownTranslatorOptions"));
+
+builder.Services.AddProxyForwardedHeaders(builder.Configuration);
+builder.Services.AddTranslateRateLimiting(builder.Configuration);
 
 builder.Services.AddSingleton<ExceptionHandleMiddleware>();
 builder.Services.AddSingleton<IMarkdownTranspilerService, MarkdownTranspilerService>();
@@ -43,6 +48,10 @@ builder.Services
 
 var app = builder.Build();
 
+// First, so everything after it (the rate limits) sees the real client address.
+app.UseForwardedHeaders();
+app.UseRouting();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -64,9 +73,11 @@ app.UseCors(corsPolicyBuilder =>
     corsPolicyBuilder.WithOrigins(origins)
         .AllowCredentials()
         .AllowAnyMethod()
-        .AllowAnyHeader());
+        .AllowAnyHeader()
+        .WithExposedHeaders("Retry-After"));
 
 app.UseMiddleware<ExceptionHandleMiddleware>();
+app.UseRateLimiter();
 app.MapHealthChecks("/_health");
 app.MapPrometheusScrapingEndpoint("/_metrics");
 app.MapControllers();

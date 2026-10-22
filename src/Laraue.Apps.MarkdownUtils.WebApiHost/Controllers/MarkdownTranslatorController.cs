@@ -1,4 +1,5 @@
-﻿using Laraue.Apps.MarkdownUtils.Contracts;
+﻿using Laraue.Apps.MarkdownTranspiler.WebApi.RateLimiting;
+using Laraue.Apps.MarkdownUtils.Contracts;
 using Laraue.Apps.MarkdownUtils.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,6 +10,7 @@ namespace Laraue.Apps.MarkdownTranspiler.WebApi.Controllers;
 public class MarkdownTranslatorController(IMarkdownTranslatorService translatorService) : ControllerBase
 {
     [HttpPost("translate")]
+    [TranslateRateLimit]
     public Task<MarkdownTranslateResponse> Translate([FromBody] MarkdownTranslateRequest request)
     {
         return translatorService.Translate(request);
