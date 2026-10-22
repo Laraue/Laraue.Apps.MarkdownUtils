@@ -22,7 +22,7 @@ builder.Services.Configure<OpenAiClientOptions>(builder.Configuration.GetSection
 builder.Services.Configure<MarkdownTranslatorOptions>(builder.Configuration.GetSection("MarkdownTranslatorOptions"));
 
 builder.Services.AddProxyForwardedHeaders(builder.Configuration);
-builder.Services.AddClientRateLimiting(builder.Configuration);
+builder.Services.AddTranslateRateLimiting(builder.Configuration);
 
 builder.Services.AddSingleton<ExceptionHandleMiddleware>();
 builder.Services.AddSingleton<RequestLogMiddleware>();
@@ -45,7 +45,6 @@ builder.Services
         .AddHttpClientInstrumentation()
         .AddRuntimeInstrumentation()
         .AddMeter(MarkdownTranslatorMetrics.MeterName)
-        .AddMeter(RateLimitingMetrics.MeterName)
         .AddPrometheusExporter());
 
 var app = builder.Build();

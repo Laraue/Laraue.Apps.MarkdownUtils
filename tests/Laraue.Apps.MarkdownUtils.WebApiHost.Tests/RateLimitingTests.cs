@@ -16,37 +16,34 @@ public class RateLimitingTests
     private static readonly IPAddress Proxy = IPAddress.Parse("10.0.0.2");
     private static readonly IPAddress Untrusted = IPAddress.Parse("203.0.113.50");
 
+    private const string MinuteWindowLimit = "RateLimiting:Translate:Windows:0:PermitLimit";
+
     [Fact]
-    public async Task Transpile_OverTheBucket_Returns429WithRetryAfter()
+    public async Task Translate_ClientsBehindTrustedProxy_HaveSeparateLimits()
     {
-        await using var factory = CreateFactory(("RateLimiting:Transpile:TokenLimit", "2"));
+        await using var factory = CreateFactory((MinuteWindowLimit, "1"));
 
-        Assert.Equal(StatusCodes.Status200OK, (await Transpile(factory, Proxy, "198.51.100.1")).StatusCode);
-        Assert.Equal(StatusCodes.Status200OK, (await Transpile(factory, Proxy, "198.51.100.1")).StatusCode);
-
-        var rejected = await Transpile(factory, Proxy, "198.51.100.1");
-
-        Assert.Equal(StatusCodes.Status429TooManyRequests, rejected.StatusCode);
-        Assert.True(int.Parse(rejected.Headers.RetryAfter.ToString()) >= 1);
+        Assert.Equal(StatusCodes.Status200OK, (await Translate(factory, "198.51.100.1")).StatusCode);
+        Assert.Equal(StatusCodes.Status200OK, (await Translate(factory, "198.51.100.2")).StatusCode);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, (await Translate(factory, "198.51.100.1")).StatusCode);
     }
 
     [Fact]
-    public async Task Transpile_ClientsBehindTrustedProxy_HaveSeparateBuckets()
+    public async Task Translate_ForwardedForFromUntrustedAddress_IsIgnored()
     {
-        await using var factory = CreateFactory(("RateLimiting:Transpile:TokenLimit", "1"));
+        await using var factory = CreateFactory((MinuteWindowLimit, "1"));
 
-        Assert.Equal(StatusCodes.Status200OK, (await Transpile(factory, Proxy, "198.51.100.1")).StatusCode);
-        Assert.Equal(StatusCodes.Status200OK, (await Transpile(factory, Proxy, "198.51.100.2")).StatusCode);
-        Assert.Equal(StatusCodes.Status429TooManyRequests, (await Transpile(factory, Proxy, "198.51.100.1")).StatusCode);
+        Assert.Equal(StatusCodes.Status200OK, (await Translate(factory, "198.51.100.1", Untrusted)).StatusCode);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, (await Translate(factory, "198.51.100.2", Untrusted)).StatusCode);
     }
 
     [Fact]
-    public async Task Transpile_ForwardedForFromUntrustedAddress_IsIgnored()
+    public async Task Transpile_IsNotLimited()
     {
-        await using var factory = CreateFactory(("RateLimiting:Transpile:TokenLimit", "1"));
+        await using var factory = CreateFactory();
 
-        Assert.Equal(StatusCodes.Status200OK, (await Transpile(factory, Untrusted, "198.51.100.1")).StatusCode);
-        Assert.Equal(StatusCodes.Status429TooManyRequests, (await Transpile(factory, Untrusted, "198.51.100.2")).StatusCode);
+        for (var i = 0; i < 100; i++)
+            Assert.Equal(StatusCodes.Status200OK, (await Transpile(factory, "198.51.100.1")).StatusCode);
     }
 
     [Fact]
@@ -108,14 +105,14 @@ public class RateLimitingTests
         });
     }
 
-    private static Task<HttpResponse> Transpile(WebApplicationFactory<Program> factory, IPAddress remote, string forwardedFor)
+    private static Task<HttpResponse> Transpile(WebApplicationFactory<Program> factory, string forwardedFor)
     {
-        return Post(factory, remote, forwardedFor, "/api/markdown-transpiler/transpile", """{"content":"# Hi"}""");
+        return Post(factory, Proxy, forwardedFor, "/api/markdown-transpiler/transpile", """{"content":"# Hi"}""");
     }
 
-    private static Task<HttpResponse> Translate(WebApplicationFactory<Program> factory, string forwardedFor)
+    private static Task<HttpResponse> Translate(WebApplicationFactory<Program> factory, string forwardedFor, IPAddress? remote = null)
     {
-        return Post(factory, Proxy, forwardedFor, "/api/markdown-translator/translate", """{"content":"# Hi","from":"en","to":"es"}""");
+        return Post(factory, remote ?? Proxy, forwardedFor, "/api/markdown-translator/translate", """{"content":"# Hi","from":"en","to":"es"}""");
     }
 
     private static async Task<HttpResponse> Post(

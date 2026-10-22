@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Threading.RateLimiting;
+using Laraue.Apps.MarkdownUtils.Services;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 
@@ -11,41 +12,39 @@ public static class RateLimitingServiceCollectionExtensions
     private const string TranslateConcurrencyPartition = "translate";
 
     /// <summary>
-    /// Limits the endpoints marked with <see cref="RateLimitedOperationAttribute"/> per client address
+    /// Limits the endpoint marked with <see cref="TranslateRateLimitAttribute"/> per client address
     /// (the real one, so the forwarded headers must be applied before the limiter runs).
     /// Over the limit the client gets 429 with Retry-After.
     /// </summary>
-    public static IServiceCollection AddClientRateLimiting(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddTranslateRateLimiting(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddValidatedOptions<RateLimitingOptions>(configuration.GetSection("RateLimiting"));
-        services.AddSingleton<RateLimitingMetrics>();
 
         services.AddRateLimiter(_ => { });
         services
             .AddOptions<RateLimiterOptions>()
-            .Configure<IOptions<RateLimitingOptions>, RateLimitingMetrics>((limiter, options, metrics) =>
+            .Configure<IOptions<RateLimitingOptions>, MarkdownTranslatorMetrics>((limiter, options, metrics) =>
             {
                 var limits = options.Value;
 
                 limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-                // The concurrency limit goes first: its permit is given back when a later limiter rejects
-                // the request, while the client windows only take permits when the request passes all of them.
+                // The concurrency limit goes first: its permit is given back when the client windows reject
+                // the request, while the windows only take permits when the request passes all of them.
                 limiter.GlobalLimiter = PartitionedRateLimiter.CreateChained(
                     TranslateConcurrencyLimiter(limits.Translate),
-                    TranslateWindowsLimiter(limits.Translate),
-                    TranspileBucketLimiter(limits.Transpile));
+                    TranslateWindowsLimiter(limits.Translate));
 
                 limiter.OnRejected = (context, _) =>
                 {
-                    var retryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var value)
-                        ? value
-                        : limits.DefaultRetryAfter;
+                    // Only the client windows know when a permit frees up; the concurrency limit doesn't.
+                    var byClientLimit = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter);
+                    if (!byClientLimit)
+                        retryAfter = limits.DefaultRetryAfter;
 
                     context.HttpContext.Response.Headers.RetryAfter =
                         Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
 
-                    if (context.HttpContext.GetRateLimitedOperation() is { } operation)
-                        metrics.RequestRejected(operation);
+                    metrics.TranslationRateLimited(byClientLimit ? RateLimit.Client : RateLimit.Concurrency);
 
                     return ValueTask.CompletedTask;
                 };
@@ -54,31 +53,11 @@ public static class RateLimitingServiceCollectionExtensions
         return services;
     }
 
-    private static PartitionedRateLimiter<HttpContext> TranspileBucketLimiter(TokenBucketLimits bucket)
-    {
-        return PartitionedRateLimiter.Create<HttpContext, string>(context =>
-        {
-            if (context.GetRateLimitedOperation() != RateLimitedOperation.Transpile)
-                return RateLimitPartition.GetNoLimiter(NoLimitPartition);
-
-            return RateLimitPartition.GetTokenBucketLimiter(
-                context.GetClientAddress(),
-                _ => new TokenBucketRateLimiterOptions
-                {
-                    TokenLimit = bucket.TokenLimit,
-                    TokensPerPeriod = bucket.TokensPerPeriod,
-                    ReplenishmentPeriod = bucket.ReplenishmentPeriod,
-                    QueueLimit = 0,
-                    AutoReplenishment = true,
-                });
-        });
-    }
-
     private static PartitionedRateLimiter<HttpContext> TranslateWindowsLimiter(TranslateLimits limits)
     {
         return PartitionedRateLimiter.Create<HttpContext, string>(context =>
         {
-            if (context.GetRateLimitedOperation() != RateLimitedOperation.Translate)
+            if (!context.IsTranslateRateLimited())
                 return RateLimitPartition.GetNoLimiter(NoLimitPartition);
 
             return RateLimitPartition.Get(
@@ -91,7 +70,7 @@ public static class RateLimitingServiceCollectionExtensions
     {
         return PartitionedRateLimiter.Create<HttpContext, string>(context =>
         {
-            if (context.GetRateLimitedOperation() != RateLimitedOperation.Translate)
+            if (!context.IsTranslateRateLimited())
                 return RateLimitPartition.GetNoLimiter(NoLimitPartition);
 
             return RateLimitPartition.GetConcurrencyLimiter(

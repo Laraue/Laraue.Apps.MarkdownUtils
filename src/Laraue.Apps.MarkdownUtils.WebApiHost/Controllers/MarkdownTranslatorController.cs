@@ -10,7 +10,7 @@ namespace Laraue.Apps.MarkdownTranspiler.WebApi.Controllers;
 public class MarkdownTranslatorController(IMarkdownTranslatorService translatorService) : ControllerBase
 {
     [HttpPost("translate")]
-    [RateLimitedOperation(RateLimitedOperation.Translate)]
+    [TranslateRateLimit]
     public Task<MarkdownTranslateResponse> Translate([FromBody] MarkdownTranslateRequest request)
     {
         return translatorService.Translate(request);
