@@ -8,6 +8,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Laraue.Apps.MarkdownUtils.C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Laraue.Apps.MarkdownUtils.Services", "src\Laraue.Apps.MarkdownUtils.Services\Laraue.Apps.MarkdownUtils.Services.csproj", "{CBA1214F-A571-489D-9A64-222AB37AFA6B}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{6E1D2B8A-3C4F-4F7B-9A51-2D7C8E0B1F42}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Laraue.Apps.MarkdownUtils.WebApiHost.Tests", "tests\Laraue.Apps.MarkdownUtils.WebApiHost.Tests\Laraue.Apps.MarkdownUtils.WebApiHost.Tests.csproj", "{A7C3E5F1-8B2D-4E6A-9C1F-3B5D7E9A2C64}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -17,6 +21,7 @@ Global
 		{C50BA1F9-58A4-475B-81A6-8E0967101E43} = {B45F5686-688E-4A5C-9AD4-B58C7F758A2A}
 		{9393854F-6258-480D-B3AC-74BB2AFA11B9} = {B45F5686-688E-4A5C-9AD4-B58C7F758A2A}
 		{CBA1214F-A571-489D-9A64-222AB37AFA6B} = {B45F5686-688E-4A5C-9AD4-B58C7F758A2A}
+		{A7C3E5F1-8B2D-4E6A-9C1F-3B5D7E9A2C64} = {6E1D2B8A-3C4F-4F7B-9A51-2D7C8E0B1F42}
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{C50BA1F9-58A4-475B-81A6-8E0967101E43}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -31,5 +36,9 @@ Global
 		{CBA1214F-A571-489D-9A64-222AB37AFA6B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CBA1214F-A571-489D-9A64-222AB37AFA6B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CBA1214F-A571-489D-9A64-222AB37AFA6B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A7C3E5F1-8B2D-4E6A-9C1F-3B5D7E9A2C64}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A7C3E5F1-8B2D-4E6A-9C1F-3B5D7E9A2C64}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A7C3E5F1-8B2D-4E6A-9C1F-3B5D7E9A2C64}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A7C3E5F1-8B2D-4E6A-9C1F-3B5D7E9A2C64}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

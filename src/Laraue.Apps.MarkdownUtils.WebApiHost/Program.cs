@@ -1,3 +1,5 @@
+using Laraue.Apps.MarkdownTranspiler.WebApi;
+using Laraue.Apps.MarkdownTranspiler.WebApi.RateLimiting;
 using Laraue.Apps.MarkdownUtils.Services;
 using Laraue.Core.Exceptions;
 using Microsoft.Extensions.Options;
@@ -19,7 +21,11 @@ builder.Services.AddOptions<MarkdownTranslatorOptions>();
 builder.Services.Configure<OpenAiClientOptions>(builder.Configuration.GetSection("OpenAiClientOptions"));
 builder.Services.Configure<MarkdownTranslatorOptions>(builder.Configuration.GetSection("MarkdownTranslatorOptions"));
 
+builder.Services.AddProxyForwardedHeaders(builder.Configuration);
+builder.Services.AddClientRateLimiting(builder.Configuration);
+
 builder.Services.AddSingleton<ExceptionHandleMiddleware>();
+builder.Services.AddSingleton<RequestLogMiddleware>();
 builder.Services.AddSingleton<IMarkdownTranspilerService, MarkdownTranspilerService>();
 builder.Services.AddSingleton<IMarkdownTranslatorService, MarkdownTranslatorService>();
 builder.Services.AddSingleton<MarkdownTranslatorMetrics>();
@@ -39,9 +45,14 @@ builder.Services
         .AddHttpClientInstrumentation()
         .AddRuntimeInstrumentation()
         .AddMeter(MarkdownTranslatorMetrics.MeterName)
+        .AddMeter(RateLimitingMetrics.MeterName)
         .AddPrometheusExporter());
 
 var app = builder.Build();
+
+// First, so everything after it (logs, rate limits) sees the real client address.
+app.UseForwardedHeaders();
+app.UseRouting();
 
 if (app.Environment.IsDevelopment())
 {
@@ -64,9 +75,12 @@ app.UseCors(corsPolicyBuilder =>
     corsPolicyBuilder.WithOrigins(origins)
         .AllowCredentials()
         .AllowAnyMethod()
-        .AllowAnyHeader());
+        .AllowAnyHeader()
+        .WithExposedHeaders("Retry-After"));
 
+app.UseMiddleware<RequestLogMiddleware>();
 app.UseMiddleware<ExceptionHandleMiddleware>();
+app.UseRateLimiter();
 app.MapHealthChecks("/_health");
 app.MapPrometheusScrapingEndpoint("/_metrics");
 app.MapControllers();
