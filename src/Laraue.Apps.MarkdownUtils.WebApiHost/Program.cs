@@ -22,6 +22,7 @@ builder.Services.Configure<MarkdownTranslatorOptions>(builder.Configuration.GetS
 builder.Services.AddSingleton<ExceptionHandleMiddleware>();
 builder.Services.AddSingleton<IMarkdownTranspilerService, MarkdownTranspilerService>();
 builder.Services.AddSingleton<IMarkdownTranslatorService, MarkdownTranslatorService>();
+builder.Services.AddSingleton<MarkdownTranslatorMetrics>();
 builder.Services.AddSingleton<Laraue.Interpreter.Markdown.IMarkdownTranspiler, Laraue.Interpreter.Markdown.MarkdownTranspiler>();
 
 builder.Services.AddHttpClient<IOpenAiClient, OpenAiClient>((services, client) =>
@@ -37,6 +38,7 @@ builder.Services
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
         .AddRuntimeInstrumentation()
+        .AddMeter(MarkdownTranslatorMetrics.MeterName)
         .AddPrometheusExporter());
 
 var app = builder.Build();
