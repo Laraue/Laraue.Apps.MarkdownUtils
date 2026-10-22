@@ -50,11 +50,26 @@ public class RateLimitingTests
     }
 
     [Fact]
-    public async Task Translate_OverTheDailyLimit_Returns429UntilTheNextDay()
+    public async Task Translate_OverTheMinuteWindow_Returns429UntilTheMinuteEnds()
     {
-        await using var factory = CreateFactory(
-            ("RateLimiting:Translate:TokenLimit", "100"),
-            ("RateLimiting:Translate:DailyLimit", "2"));
+        // The default windows: 3 per minute, 15 per 10 minutes, 30 per hour, 50 per day.
+        await using var factory = CreateFactory();
+
+        for (var i = 0; i < 3; i++)
+            Assert.Equal(StatusCodes.Status200OK, (await Translate(factory, "198.51.100.1")).StatusCode);
+
+        var rejected = await Translate(factory, "198.51.100.1");
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, rejected.StatusCode);
+        Assert.InRange(int.Parse(rejected.Headers.RetryAfter.ToString()), 1, 60);
+
+        Assert.Equal(StatusCodes.Status200OK, (await Translate(factory, "198.51.100.2")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Translate_OverTheDailyWindow_Returns429UntilTheNextDay()
+    {
+        await using var factory = CreateFactory(("RateLimiting:Translate:Windows:3:PermitLimit", "2"));
 
         Assert.Equal(StatusCodes.Status200OK, (await Translate(factory, "198.51.100.1")).StatusCode);
         Assert.Equal(StatusCodes.Status200OK, (await Translate(factory, "198.51.100.1")).StatusCode);
@@ -63,14 +78,12 @@ public class RateLimitingTests
 
         Assert.Equal(StatusCodes.Status429TooManyRequests, rejected.StatusCode);
         Assert.True(int.Parse(rejected.Headers.RetryAfter.ToString()) > TimeSpan.FromHours(23).TotalSeconds);
-
-        Assert.Equal(StatusCodes.Status200OK, (await Translate(factory, "198.51.100.2")).StatusCode);
     }
 
     [Fact]
     public async Task WrongLimit_FailsTheStart()
     {
-        await using var factory = CreateFactory(("RateLimiting:Translate:DailyLimit", "0"));
+        await using var factory = CreateFactory(("RateLimiting:Translate:Windows:0:PermitLimit", "0"));
 
         Assert.ThrowsAny<Exception>(() => factory.Server);
     }

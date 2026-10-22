@@ -39,25 +39,27 @@ public class TokenBucketLimits
     public TimeSpan ReplenishmentPeriod { get; set; } = TimeSpan.FromSeconds(1);
 }
 
-public sealed class TranslateLimits : TokenBucketLimits
+public sealed class TranslateLimits
 {
-    public TranslateLimits()
-    {
-        TokenLimit = 3;
-        TokensPerPeriod = 1;
-        ReplenishmentPeriod = TimeSpan.FromSeconds(6);
-    }
-
     /// <summary>
-    /// Max translations of one client per day.
+    /// Max translations of one client per window, all of them apply (e.g. 3 per minute and 50 per day).
+    /// Empty by default: the configuration binder adds to a list instead of replacing it.
     /// </summary>
-    [Range(1, int.MaxValue)]
-    public int DailyLimit { get; set; } = 100;
+    [Required, MinLength(1), ValidateEnumeratedItems]
+    public List<WindowLimit> Windows { get; set; } = [];
 
     /// <summary>
-    /// Max translations running at the same time, for all clients together. Requests over it are rejected,
-    /// not queued: the limiters are chained, and a queued request would take a second token from the client's bucket.
+    /// Max translations running at the same time, for all clients together. Requests over it are rejected, not queued.
     /// </summary>
     [Range(1, int.MaxValue)]
     public int ConcurrencyLimit { get; set; } = 4;
+}
+
+public sealed class WindowLimit
+{
+    [Range(1, int.MaxValue)]
+    public int PermitLimit { get; set; }
+
+    [Range(typeof(TimeSpan), "00:00:01", "7.00:00:00")]
+    public TimeSpan Window { get; set; }
 }

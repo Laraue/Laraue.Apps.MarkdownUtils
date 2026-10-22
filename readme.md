@@ -10,7 +10,7 @@ Built with [Laraue.Interpreter.Markdown](https://github.com/win7user10/Laraue.In
 ### Rate limits
 Both endpoints are limited per client address; over the limit the API answers `429` with `Retry-After` (seconds).
 The limits are in the `RateLimiting` section of `appsettings.json` and are checked on start:
-- `Translate` - a token bucket per client, a `DailyLimit` per client and a `ConcurrencyLimit` for all clients together
+- `Translate` - `Windows` per client, all of them apply (by default 3 per minute, 15 per 10 minutes, 30 per hour, 50 per day; fixed windows starting at the client's first request), and a `ConcurrencyLimit` for all clients together
 - `Transpile` - a looser token bucket per client
 
 The client address is taken from `X-Forwarded-For`, only when the request comes from a proxy listed in

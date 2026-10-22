@@ -28,10 +28,12 @@ public static class RateLimitingServiceCollectionExtensions
                 var limits = options.Value;
 
                 limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                // The concurrency limit goes first: its permit is given back when a later limiter rejects
+                // the request, while the client windows only take permits when the request passes all of them.
                 limiter.GlobalLimiter = PartitionedRateLimiter.CreateChained(
-                    ClientBucketLimiter(limits),
-                    TranslateDailyLimiter(limits.Translate),
-                    TranslateConcurrencyLimiter(limits.Translate));
+                    TranslateConcurrencyLimiter(limits.Translate),
+                    TranslateWindowsLimiter(limits.Translate),
+                    TranspileBucketLimiter(limits.Transpile));
 
                 limiter.OnRejected = (context, _) =>
                 {
@@ -52,23 +54,15 @@ public static class RateLimitingServiceCollectionExtensions
         return services;
     }
 
-    private static PartitionedRateLimiter<HttpContext> ClientBucketLimiter(RateLimitingOptions limits)
+    private static PartitionedRateLimiter<HttpContext> TranspileBucketLimiter(TokenBucketLimits bucket)
     {
         return PartitionedRateLimiter.Create<HttpContext, string>(context =>
         {
-            var operation = context.GetRateLimitedOperation();
-            TokenBucketLimits? bucket = operation switch
-            {
-                RateLimitedOperation.Translate => limits.Translate,
-                RateLimitedOperation.Transpile => limits.Transpile,
-                _ => null,
-            };
-
-            if (operation is null || bucket is null)
+            if (context.GetRateLimitedOperation() != RateLimitedOperation.Transpile)
                 return RateLimitPartition.GetNoLimiter(NoLimitPartition);
 
             return RateLimitPartition.GetTokenBucketLimiter(
-                $"{operation.Value.ToTagValue()}:{context.GetClientAddress()}",
+                context.GetClientAddress(),
                 _ => new TokenBucketRateLimiterOptions
                 {
                     TokenLimit = bucket.TokenLimit,
@@ -80,22 +74,16 @@ public static class RateLimitingServiceCollectionExtensions
         });
     }
 
-    private static PartitionedRateLimiter<HttpContext> TranslateDailyLimiter(TranslateLimits limits)
+    private static PartitionedRateLimiter<HttpContext> TranslateWindowsLimiter(TranslateLimits limits)
     {
         return PartitionedRateLimiter.Create<HttpContext, string>(context =>
         {
             if (context.GetRateLimitedOperation() != RateLimitedOperation.Translate)
                 return RateLimitPartition.GetNoLimiter(NoLimitPartition);
 
-            return RateLimitPartition.GetFixedWindowLimiter(
+            return RateLimitPartition.Get(
                 context.GetClientAddress(),
-                _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = limits.DailyLimit,
-                    Window = TimeSpan.FromDays(1),
-                    QueueLimit = 0,
-                    AutoReplenishment = true,
-                });
+                _ => new MultiWindowRateLimiter(limits.Windows));
         });
     }
 
