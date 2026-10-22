@@ -25,7 +25,6 @@ builder.Services.AddProxyForwardedHeaders(builder.Configuration);
 builder.Services.AddTranslateRateLimiting(builder.Configuration);
 
 builder.Services.AddSingleton<ExceptionHandleMiddleware>();
-builder.Services.AddSingleton<RequestLogMiddleware>();
 builder.Services.AddSingleton<IMarkdownTranspilerService, MarkdownTranspilerService>();
 builder.Services.AddSingleton<IMarkdownTranslatorService, MarkdownTranslatorService>();
 builder.Services.AddSingleton<MarkdownTranslatorMetrics>();
@@ -49,7 +48,7 @@ builder.Services
 
 var app = builder.Build();
 
-// First, so everything after it (logs, rate limits) sees the real client address.
+// First, so everything after it (the rate limits) sees the real client address.
 app.UseForwardedHeaders();
 app.UseRouting();
 
@@ -77,7 +76,6 @@ app.UseCors(corsPolicyBuilder =>
         .AllowAnyHeader()
         .WithExposedHeaders("Retry-After"));
 
-app.UseMiddleware<RequestLogMiddleware>();
 app.UseMiddleware<ExceptionHandleMiddleware>();
 app.UseRateLimiter();
 app.MapHealthChecks("/_health");

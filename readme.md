@@ -18,5 +18,4 @@ The client address is taken from `X-Forwarded-For`, only when the request comes 
 `ForwardedHeaders:KnownProxies` (addresses) or `ForwardedHeaders:KnownNetworks` (CIDR, e.g. `172.16.0.0/12` for a docker network).
 Without them only loopback is trusted, and all requests coming through the proxy share one limit.
 
-Every API request is logged with the client address, user agent and body size (`API request ...` log lines);
-the rejections are counted by `markdown_translator_rate_limited_total{limit="client|concurrency"}`.
+The rejections are counted by `markdown_translator_rate_limited_total{limit="client|concurrency"}`.
